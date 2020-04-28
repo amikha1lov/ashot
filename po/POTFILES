@@ -1,0 +1,7 @@
+data/com.github.amikha1lov.ashot.desktop.in
+data/com.github.amikha1lov.ashot.appdata.xml.in
+data/com.github.amikha1lov.ashot.gschema.xml
+src/window.ui
+src/main.py
+src/window.py
+
