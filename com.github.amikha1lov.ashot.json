@@ -1,14 +1,15 @@
 {
     "app-id" : "com.github.amikha1lov.ashot",
     "runtime" : "org.gnome.Platform",
-    "runtime-version" : "3.34",
+    "runtime-version" : "3.36",
     "sdk" : "org.gnome.Sdk",
     "command" : "ashot",
     "finish-args" : [
         "--share=network",
         "--share=ipc",
         "--socket=fallback-x11",
-        "--socket=wayland"
+        "--socket=wayland",
+        "--filesystem=home"
     ],
     "cleanup" : [
         "/include",
@@ -22,6 +23,51 @@
         "*.a"
     ],
     "modules" : [
+    "shared-modules/glu/glu-9.json",
+    		{
+			"name": "glew",
+			"no-autogen": true,
+			"make-args": [
+				"GLEW_PREFIX=/app",
+				"GLEW_DEST=/app",
+				"LIBDIR=/app/lib"
+			],
+			"make-install-args": [
+				"GLEW_PREFIX=/app",
+				"GLEW_DEST=/app",
+				"LIBDIR=/app/lib"
+			],
+			"sources": [
+				{
+					"type": "archive",
+					"url": "http://archive.ubuntu.com/ubuntu/pool/universe/g/glew/glew_2.1.0.orig.tar.xz",
+					"sha256": "bf02e906252b283135406791969bbb6a2a530d685c1b9402a8c14a102b244264"
+				}
+			]
+		},
+            {
+      "name": "glm",
+      "cleanup": ["*"],
+      "buildsystem": "cmake-ninja",
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/g-truc/glm/releases/download/0.9.9.2/glm-0.9.9.2.zip",
+          "sha256": "209b5943d393925e1a6ecb6734e7507b8f6add25e72a605b25d0d0d382e64fd4"
+        }
+      ]
+    },
+                {
+      "name": "slop",
+      "buildsystem": "cmake-ninja",
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/naelstrof/slop/archive/v7.4.zip",
+          "sha256": "bf7610fbb4e3de43ef7182969207476953109f1bf2066fb6e3b84f237e69912e"
+        }
+      ]
+    },
         {
             "name" : "ashot",
             "builddir" : true,
