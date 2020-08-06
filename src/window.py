@@ -21,83 +21,205 @@ from subprocess import Popen, PIPE
 import time
 import cairo
 
+class MouseButton:
+    LEFT_BUTTON = 1
+    MIDDLE_BUTTON = 2
+    RIGHT_BUTTON = 3
+
 @Gtk.Template(resource_path='/com/github/amikha1lov/ashot/window.ui')
 class AshotWindow(Gtk.ApplicationWindow):
     __gtype_name__ = 'AshotWindow'
 
-    fonts = Gtk.Template.Child()
-    main_box = Gtk.Template.Child()
-    color_button = Gtk.Template.Child()
-    bottom_box = Gtk.Template.Child()
+    surface = None
+    isDrawing = False
+    drawType = "Drawing"
+    brushSizeValue = 0
+    currentWidth = 0
+    currentHeight = 0
+    image = None
+    i = 0
+    elements = []
+    brushColorValue =[0.0, 0.0, 0.0, 1.0]
+    abCoords =[ [0.0, 0.0], [0.0, 0.0] ]
+    linePoints = []
+    fileName = ""
 
+    main_box = Gtk.Template.Child()
+    bottom_box = Gtk.Template.Child()
+    color_button = Gtk.Template.Child()
+    brushSizeProp = Gtk.Template.Child()
+    drawArea = Gtk.Template.Child()
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
+        self.brushSizeValue = self.brushSizeProp.get_value()
+        self.drawArea.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        self.drawArea.add_events(Gdk.EventMask.BUTTON_RELEASE_MASK)
+        self.drawArea.add_events(Gdk.EventMask.BUTTON_MOTION_MASK)
         window = Gdk.get_default_root_window()
-        x, y, width, height = window.get_geometry()
-
         coordinate = Popen("slop -n -c 0.3,0.4,0.6,0.4 -l -t 0 -f '%w %h %x %y'",shell=True,stdout=PIPE).communicate()
         listCoor = list(coordinate)
         listCoor = listCoor[0].decode().split()
         width,height,x,y=int(listCoor[0]),int(listCoor[1]),int(listCoor[2]),int(listCoor[3])
         pb = Gdk.pixbuf_get_from_window(window, x, y, width,height)
         pathImg = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES)
-        fileName =(pathImg + "/GShot") + time.strftime("%Y-%m-%d-%H:%M:%S.png", time.localtime())
-        print(fileName)
+        self.fileName =(pathImg + "/GShot") + time.strftime("%Y-%m-%d-%H:%M:%S.png", time.localtime())
+        print(self.fileName)
         if pb:
-            pb.savev(fileName,"png", (), ())
+            pb.savev(self.fileName,"png", (), ())
             print("Screenshot saved to screenshot.png.")
         else:
             print("Unable to get the screenshot.")
 
-
-
-
-
-        print(self.color_button.get_rgba().to_color())
-        print(self.color_button.get_rgba().to_string())
-
-        print(self.color_button.get_rgba().red.hex())
-        print(self.fonts.get_font_size())
-
-        print(self.fonts.get_font_desc().get_family())
-
-
-
-
-
-
-
-
-
-
-        self.image = GdkPixbuf.Pixbuf.new_from_file(fileName)
+        self.image = GdkPixbuf.Pixbuf.new_from_file(self.fileName)
 
         self.set_default_size(self.image.get_width(), self.image.get_height())
-        self.drawing_area = Gtk.DrawingArea()
 
-        self.drawing_area.set_size_request(self.image.get_width(), self.image.get_height())
-        self.drawing_area.set_events(Gdk.EventMask.ALL_EVENTS_MASK)
-        scrolledwindow = Gtk.ScrolledWindow()
-        viewport = Gtk.Viewport()
-        viewport.add(self.drawing_area)
-        scrolledwindow.add(viewport)
-        self.main_box.pack_start(scrolledwindow, True, True, 0)
-        self.add(self.main_box)
-        self.drawing_area.connect("enter-notify-event", self.on_drawing_area_mouse_enter)
-        self.drawing_area.connect("leave-notify-event", self.on_drawing_area_mouse_leave)
-        self.drawing_area.connect("button-press-event", self.on_drawing_area_mouse_click)
-        self.drawing_area.connect("draw", self.on_drawing_area_draw)
-        self.drawing_area.connect("motion-notify-event", self.on_drawing_area_mouse_motion)
-        pixbuf = self.image
-        self.drawing_area.set_size_request(pixbuf.get_width(), pixbuf.get_height())
+    @Gtk.Template.Callback()
+    def setDrawState(self,widget):
+        self.drawType = widget.get_label()
 
+    @Gtk.Template.Callback()
+    def onBrushSizeChange(self,widget):
+        self.brushSizeValue = self.brushSizeProp.get_value()
 
-        self.show_all()
+    @Gtk.Template.Callback()
+    def onColorSet(self,widget):
+        rgba = widget.get_rgba()
+        self.brushColorValue = [rgba.red, rgba.green, rgba.blue, rgba.alpha]
+
+    @Gtk.Template.Callback()
+    def onButtonPress(self,widget,event):
+        if event.type == Gdk.EventType.BUTTON_PRESS and event.button == MouseButton.LEFT_BUTTON:
+            self.isDrawing = True
+            self.abCoords[0] = [event.x, event.y]
+            self.linePoints.append([event.x, event.y])
+        if event.type == Gdk.EventType.BUTTON_PRESS and event.button == MouseButton.LEFT_BUTTON:
+            self.abCoords[1] = [event.x, event.y]
+
+    @Gtk.Template.Callback()
+    def onButtonRelease(self,widget,event):
+        self.isDrawing = False
+        self.abCoords[1] = [event.x, event.y]
+        del self.linePoints[:]
+
+    @Gtk.Template.Callback()
+    def onDraw(self,area,context):
+        if self.surface:
+            context.set_source_surface(self.surface, 0.0, 0.0)
+            context.paint()
+        else:
+            print("No surface")
+
+        return False
+
 
 
     @Gtk.Template.Callback()
-    def on_save(self, button):
+    def onConfigure(self,area,event, data = None):
+        areaWidth = area.get_allocated_width()
+        areaHeight = area.get_allocated_height()
+        print(self.image)
+        print(type(self.image))
+        _surface = cairo.ImageSurface.create_from_png(self.fileName)
+
+        if self.surface:
+            surfaceWidth = self.surface.get_width()
+            surfaceHeight = self.surface.get_height()
+
+            if areaWidth < surfaceWidth or areaHeight < surfaceHeight:
+                return False
+
+            context = cairo.Context(_surface)
+
+            context.rectangle(0,0,areaWidth,areaHeight)
+            context.set_source_rgba(1,1,1,1.0)
+            context.fill()
+
+            context.set_source_surface(self.surface, 0.0, 0.0)
+            context.scale(areaWidth,areaHeight)
+            context.paint()
+            self.currentWidth = areaWidth
+            self.currentHeight = areaHeight
+        else:
+            self.drawArea.set_size_request(self.currentWidth, self.currentHeight)
+
+        self.surface = _surface
+        self.context = cairo.Context(_surface)
+        return False
+
+
+    @Gtk.Template.Callback()
+    def onMotion(self,area,event):
+        if self.isDrawing:
+            self.abCoords[1] = [event.x, event.y]
+
+            p1 = self.abCoords[0]
+            p2 = self.abCoords[1]
+
+            x1 = p1[0]
+            y1 = p1[1]
+            x2 = p2[0]
+            y2 = p2[1]
+            w = x2 - x1
+            h = y2 - y1
+            if "Drawing" in self.drawType:
+                self.linePoints.append([event.x, event.y])
+                self.drawFree()
+            if "Square" in self.drawType:
+                self.drawSquare([x1,y1,w,h])
+            if "Line" in self.drawType:
+                self.linePoints.append([event.x, event.y])
+                self.drawLine()
+            self.drawArea.queue_draw()
+
+
+
+
+    def drawFree(self):
+        rgba = self.brushColorValue
+        self.context.set_source_rgba(rgba[0],rgba[1],rgba[2],rgba[3])
+        self.context.set_line_width(self.brushSizeValue)
+        self.context.set_line_cap(1)
+
+        for i in self.linePoints:
+            for j in self.linePoints:
+                self.context.move_to(i[0], i[1])
+                self.context.line_to(j[0], j[1])
+                self.context.stroke()
+
+        del self.linePoints[len(self.linePoints) - 2: -1]
+
+
+    def drawLine(self):
+        prgba = self.brushColorValue
+        self.context.set_source_rgba(rgba[0],rgba[1],rgba[2],rgba[3])
+        self.context.set_line_width(self.brushSizeValue)
+        self.context.set_line_cap(1)
+
+        for i in self.linePoints:
+            for j in self.linePoints:
+                self.context.move_to(i[0], i[1])
+                self.context.line_to(j[0], j[1])
+                self.context.stroke()
+
+        del self.linePoints[len(self.linePoints) - 2: -1]
+
+    def drawSquare(self,coords):
+
+
+
+        rgba = self.brushColorValue
+        self.context.set_source_rgba(rgba[0],rgba[1],rgba[2],rgba[3])
+        self.context.rectangle(coords[0],coords[1],coords[2],coords[3])
+
+        self.context.fill()
+
+
+        self.drawArea.queue_draw()
+
+
+    @Gtk.Template.Callback()
+    def onSave(self, button):
         dialog = Gtk.FileChooserDialog("Please choose a folder",self,Gtk.FileChooserAction.SAVE,(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, "Select", Gtk.ResponseType.OK),)
         dialog.set_default_size(800, 400)
 
@@ -114,10 +236,12 @@ class AshotWindow(Gtk.ApplicationWindow):
 
         print(self.pathAndFileName)
         self.drawing_area_write(self.pathAndFileName)
-    @Gtk.Template.Callback()
+
+
+
     def drawing_area_write(self,path):
         # drawingarea1 is a Gtk.DrawingArea
-        window = self.drawing_area.get_window()
+        window = self.drawArea.get_window()
 
         # Some code to get the coordinates for the image, which is centered in the
         # in the drawing area. You can ignore it for the purpose of this example
@@ -131,66 +255,4 @@ class AshotWindow(Gtk.ApplicationWindow):
         pixbuf.savev(path, 'png', [], [])
 
 
-
-    def on_drawing_area_mouse_enter(self, widget, event):
-        print("In - DrawingArea")
-
-    def on_drawing_area_mouse_leave(self, widget, event):
-        print("Out - DrawingArea")
-
-    def on_drawing_area_mouse_motion(self, widget, event):
-
-        (x, y) = int(event.x), int(event.y)
-        offset = ( (y*self.image.get_rowstride()) +
-                   (x*self.image.get_n_channels()) )
-        pixel_intensity = self.image.get_pixels()[offset]
-        print("(" + str(x) + ", " + str(y) + ") = " + str(pixel_intensity))
-
-
-        (x, y) = int(event.x), int(event.y)
-        print("click")
-        print(x)
-        print(y)
-
-    @Gtk.Template.Callback()
-    def on_drawing_area_mouse_click(self, widget, event):
-        (x, y) = int(event.x), int(event.y)
-        print("click")
-        print(x)
-        print(y)
-
-
-        self.popover = Gtk.Popover()
-        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.main_box.pack_start(Gtk.ModelButton("Item 1"), False, True, 10)
-        self.main_box.pack_start(Gtk.Label("Item 2"), False, True, 10)
-        self.popover.add(self.main_box)
-        self.popover.set_position(Gtk.PositionType.BOTTOM)
-
-        self.popover.show_all()
-        self.popover.popup()
-
-        cairo_context = self.drawing_area.get_window().cairo_create()
-        pixbuf = self.image
-        self.drawing_area.set_size_request(pixbuf.get_width(), pixbuf.get_height())
-        Gdk.cairo_set_source_pixbuf(cairo_context, pixbuf, 0, 0)
-        cairo_context.paint()
-        cr = cairo_context
-        cr.set_font_size(20)
-        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL,
-        cairo.FONT_WEIGHT_NORMAL)
-        cr.set_source_rgb(255 , 0 , 0)
-        cr.move_to(x , y)
-        cr.show_text("ТУТ 2 ТУТ ТЕКСТ")
-        cr.stroke()
-        cr.set_source_surface(pixbuf, 10, 10)
-        cr.paint()
-        self.drawing_area.queue_draw()
-
-    @Gtk.Template.Callback()
-    def on_drawing_area_draw(self, drawable, cairo_context):
-        pixbuf = self.image
-        self.drawing_area.set_size_request(pixbuf.get_width(), pixbuf.get_height())
-        Gdk.cairo_set_source_pixbuf(cairo_context, pixbuf, 0, 0)
-        cairo_context.paint()
-
+ 
